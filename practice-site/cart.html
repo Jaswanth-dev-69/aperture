@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cart — Aperture Practice Shop</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header><a class="brand" href="index.html">Aperture<span>Shop</span></a></header>
+  <main>
+    <h1>Your Cart</h1>
+    <p class="subtitle">One item, straight from the product page.</p>
+
+    <div class="card">
+      <div class="receipt-row"><b>Item</b><span id="cart-item"></span></div>
+      <div class="receipt-row"><b>Quantity</b><span id="cart-qty"></span></div>
+      <div class="receipt-row"><b>Total</b><span id="cart-total"></span></div>
+    </div>
+
+    <div class="actions">
+      <a class="btn" id="checkout-link" href="#">Proceed to checkout</a>
+      <a class="btn secondary" href="index.html">Back to shop</a>
+    </div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const item = params.get("item") || "Mystery Item";
+    const price = parseFloat(params.get("price") || "0");
+    const qty = parseInt(params.get("qty") || "1", 10);
+
+    document.getElementById("cart-item").textContent = item;
+    document.getElementById("cart-qty").textContent = qty;
+    document.getElementById("cart-total").textContent = "$" + (price * qty).toFixed(2);
+    document.getElementById("checkout-link").href =
+      "checkout.html?item=" + encodeURIComponent(item) + "&total=" + (price * qty).toFixed(2);
+  </script>
+</body>
+</html>

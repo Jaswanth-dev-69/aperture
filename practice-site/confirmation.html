@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Order Confirmed — Aperture Practice Shop</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header><a class="brand" href="index.html">Aperture<span>Shop</span></a></header>
+  <main>
+    <h1>Order placed 🎉</h1>
+    <p class="subtitle">This is a fake store — nothing was actually ordered.</p>
+
+    <div class="card" id="receipt"></div>
+
+    <div class="actions">
+      <a class="btn secondary" href="index.html">Start over</a>
+    </div>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const rows = [
+      ["Item", params.get("item")],
+      ["Total", "$" + (params.get("total") || "0.00")],
+      ["Name", params.get("name")],
+      ["Email", params.get("email")],
+      ["Address", params.get("address")],
+      ["Country", params.get("country")],
+      ["Newsletter", params.get("newsletter") === "yes" ? "Subscribed" : "Not subscribed"],
+    ];
+    const receipt = document.getElementById("receipt");
+    for (const [label, value] of rows) {
+      const row = document.createElement("div");
+      row.className = "receipt-row";
+      row.innerHTML = "<b>" + label + "</b><span></span>";
+      row.querySelector("span").textContent = value || "—";
+      receipt.appendChild(row);
+    }
+  </script>
+</body>
+</html>

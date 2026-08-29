@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Checkout — Aperture Practice Shop</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header><a class="brand" href="index.html">Aperture<span>Shop</span></a></header>
+  <main>
+    <h1>Checkout</h1>
+    <p class="subtitle" id="checkout-summary"></p>
+
+    <form class="card" id="checkout-form" method="get" action="confirmation.html">
+      <input type="hidden" name="item" id="hidden-item" />
+      <input type="hidden" name="total" id="hidden-total" />
+
+      <label for="name">Full name</label>
+      <input type="text" id="name" name="name" placeholder="Jane Doe" required />
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" placeholder="jane@example.com" required />
+
+      <label for="address">Shipping address</label>
+      <textarea id="address" name="address" placeholder="221B Baker Street"></textarea>
+
+      <label for="country">Country</label>
+      <select id="country" name="country">
+        <option value="IN">India</option>
+        <option value="US">United States</option>
+        <option value="UK">United Kingdom</option>
+      </select>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="newsletter" name="newsletter" value="yes" />
+        <label for="newsletter">Subscribe to occasional emails</label>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Place order</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const item = params.get("item") || "Mystery Item";
+    const total = params.get("total") || "0.00";
+    document.getElementById("checkout-summary").textContent = item + " — $" + total;
+    document.getElementById("hidden-item").value = item;
+    document.getElementById("hidden-total").value = total;
+  </script>
+</body>
+</html>
