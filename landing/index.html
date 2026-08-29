@@ -1,0 +1,385 @@
+<title>Aperture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root{
+    --bg:#EEF1EF;
+    --surface:#FFFFFF;
+    --surface-2:#E4E9E6;
+    --ink:#151F1C;
+    --ink-muted:#4C5B56;
+    --ink-faint:#7C8C86;
+    --line:#D3DBD6;
+    --line-strong:#B7C3BD;
+    --accent:#0E6E66;
+    --accent-strong:#094F49;
+    --accent-tint:#DCEBE8;
+    --iris-blade:#20302B;
+    --iris-rim:#0E6E66;
+    --font-display:"Fraunces", Georgia, "Times New Roman", serif;
+    --font-body:"Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#101613;
+      --surface:#171F1B;
+      --surface-2:#1E2723;
+      --ink:#E7EDE9;
+      --ink-muted:#AAB8B1;
+      --ink-faint:#7C8C86;
+      --line:#2A342E;
+      --line-strong:#3A463F;
+      --accent:#4FD1C0;
+      --accent-strong:#7EE4D6;
+      --accent-tint:#173430;
+      --iris-blade:#2C3733;
+      --iris-rim:#4FD1C0;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#101613;
+    --surface:#171F1B;
+    --surface-2:#1E2723;
+    --ink:#E7EDE9;
+    --ink-muted:#AAB8B1;
+    --ink-faint:#7C8C86;
+    --line:#2A342E;
+    --line-strong:#3A463F;
+    --accent:#4FD1C0;
+    --accent-strong:#7EE4D6;
+    --accent-tint:#173430;
+    --iris-blade:#2C3733;
+    --iris-rim:#4FD1C0;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-size:16.5px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--accent-tint); color:var(--accent-strong);}
+  a{color:var(--accent-strong);}
+  h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0; color:var(--ink); font-weight:600;}
+  p{margin:0; color:var(--ink); max-width:62ch;}
+  .mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  .muted{color:var(--ink-muted);}
+  .faint{color:var(--ink-faint);}
+  a:focus-visible, button:focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+
+  .wrap{max-width:1040px; margin:0 auto; padding:0 28px;}
+
+  /* ---------- nav ---------- */
+  .topbar{padding:22px 0;}
+  .topbar .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{font-family:var(--font-display); font-weight:600; font-size:17px; display:flex; align-items:center; gap:8px;}
+  .brand .dot{width:8px; height:8px; border-radius:50%; background:var(--accent); display:inline-block;}
+  .topnav{display:flex; gap:26px; font-size:14px;}
+  .topnav a{color:var(--ink-muted); text-decoration:none;}
+  .topnav a:hover{color:var(--ink);}
+
+  /* ---------- hero ---------- */
+  .hero{padding:56px 0 88px;}
+  .hero-grid{display:grid; grid-template-columns:1.15fr 1fr; gap:56px; align-items:center;}
+  @media (max-width:840px){.hero-grid{grid-template-columns:1fr; gap:36px;}}
+
+  .eyebrow{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--accent-strong); margin-bottom:18px; display:block;
+  }
+  .hero h1{
+    font-size:clamp(36px,5.2vw,58px); line-height:1.04; max-width:13ch;
+    font-variation-settings:"opsz" 144, "wght" 600;
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .hero h1{animation:openUp 1.3s cubic-bezier(.16,.9,.28,1) both;}
+  }
+  @keyframes openUp{
+    from{font-variation-settings:"opsz" 9, "wght" 380; opacity:0; transform:translateY(6px);}
+    to{font-variation-settings:"opsz" 144, "wght" 600; opacity:1; transform:translateY(0);}
+  }
+  .hero .dek{font-size:17.5px; color:var(--ink-muted); margin-top:20px; max-width:46ch;}
+  .hero-ctas{display:flex; align-items:center; gap:18px; margin-top:32px; flex-wrap:wrap;}
+
+  .btn{
+    font-family:var(--font-body); font-weight:600; font-size:14.5px;
+    padding:12px 22px; border-radius:7px; border:1px solid var(--accent);
+    background:var(--accent); color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn:hover{background:var(--accent-strong); border-color:var(--accent-strong);}
+  .btn-ghost{
+    font-size:14.5px; color:var(--ink); text-decoration:none; border-bottom:1px solid var(--line-strong); padding-bottom:2px;
+  }
+  .btn-ghost:hover{border-color:var(--ink);}
+  .trust-line{margin-top:20px; font-family:var(--font-mono); font-size:12px; color:var(--ink-faint);}
+
+  .iris-stage{display:flex; align-items:center; justify-content:center;}
+  #iris{width:min(380px,100%); height:auto; display:block;}
+
+  /* ---------- sections ---------- */
+  section{padding:64px 0; border-top:1px solid var(--line);}
+  .section-head{max-width:56ch; margin-bottom:36px;}
+  .section-head .eyebrow{margin-bottom:12px;}
+  section h2{font-size:clamp(24px,3.2vw,30px);}
+  .lede{font-size:16.5px; color:var(--ink-muted); margin-top:14px;}
+
+  /* ---------- pitch ---------- */
+  .pitch-body p{margin-bottom:16px; font-size:16px;}
+  .pitch-body p:last-child{margin-bottom:0;}
+  .pitch-body b{color:var(--ink);}
+
+  /* ---------- how it works ---------- */
+  .steps{display:grid; grid-template-columns:repeat(3,1fr); gap:28px; margin-top:8px;}
+  @media (max-width:760px){.steps{grid-template-columns:1fr;}}
+  .step{padding-top:18px; border-top:2px solid var(--accent);}
+  .step-num{font-family:var(--font-mono); font-size:12.5px; color:var(--accent-strong); display:block; margin-bottom:10px;}
+  .step h3{font-size:18px; font-weight:600; margin-bottom:8px;}
+  .step p{font-size:14.5px; color:var(--ink-muted);}
+
+  /* ---------- spec sheet ---------- */
+  .spec-sheet{
+    border:1px solid var(--line-strong); border-radius:10px; background:var(--surface);
+    padding:8px 0; margin-top:8px;
+  }
+  .spec-row{
+    display:grid; grid-template-columns:1fr auto; gap:18px; align-items:baseline;
+    padding:13px 24px; border-top:1px solid var(--line);
+  }
+  .spec-row:first-child{border-top:none;}
+  .spec-label{font-size:14.5px; color:var(--ink-muted);}
+  .spec-value{font-family:var(--font-mono); font-size:14px; color:var(--ink); text-align:right; white-space:nowrap;}
+
+  /* ---------- lineup ---------- */
+  .lineup{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; margin-top:8px;}
+  @media (max-width:760px){.lineup{grid-template-columns:1fr;}}
+  .lineup-card{border:1px solid var(--line); border-radius:10px; padding:22px 20px; background:var(--surface);}
+  .lineup-card.current{border-color:var(--accent); background:var(--accent-tint);}
+  .lineup-tag{font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent-strong);}
+  .lineup-card h3{font-size:16.5px; margin:8px 0 6px;}
+  .lineup-card p{font-size:13.5px; color:var(--ink-muted);}
+
+  /* ---------- footer ---------- */
+  footer{padding:44px 0 60px;}
+  .footer-row{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;}
+  footer .faint{font-size:13px;}
+  footer a{color:var(--ink-muted); text-decoration:none; font-size:13.5px;}
+  footer a:hover{color:var(--ink);}
+
+  @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important;} }
+</style>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>Aperture</div>
+    <nav class="topnav">
+      <a href="#pitch">Why on-device</a>
+      <a href="#how">How it works</a>
+      <a href="#spec">Spec</a>
+      <a href="https://github.com/Jaswanth-dev-69/aperture">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<main>
+  <div class="hero wrap">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow">Privacy-first browser automation</span>
+        <h1>Nothing leaves the aperture but light.</h1>
+        <p class="dek">Aperture records what you do in the browser — clicks, typing, scrolling, whole checkout flows — and replays it later. No screenshot, no keystroke, no page content is ever sent anywhere. It happens on your machine, or it doesn't happen.</p>
+        <div class="hero-ctas">
+          <a class="btn" href="https://github.com/Jaswanth-dev-69/aperture">View source on GitHub →</a>
+          <a class="btn-ghost" href="#how">How it works</a>
+        </div>
+        <p class="trust-line">MIT licensed · Manifest V3 · Zero network calls in the core record/replay loop</p>
+      </div>
+      <div class="iris-stage">
+        <canvas id="iris" width="760" height="760" role="img" aria-label="An illustration of a camera aperture iris opening"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <section id="pitch">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Why on-device</span>
+        <h2>Every other lens points at a server.</h2>
+      </div>
+      <div class="pitch-body">
+        <p>The current wave of browser agents — <b>Claude for Chrome</b>, <b>OpenAI Atlas</b>, <b>Perplexity Comet</b>, and a swarm of smaller tools — work by sending your screen to a server and asking a model what to do next. That's a reasonable trade for a lot of tasks. It's a bad one when the tab you're automating is a banking dashboard, a patient record, or an internal tool with your employer's data in it.</p>
+        <p>Aperture takes the other trade. It fingerprints the elements you interact with — by id, by label, by visible text, by where they sit in the page — and uses that same resilient chain to find them again later, entirely inside your browser. There's no server in the loop to send anything to, because there's no server in the loop at all.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">How it works</span>
+        <h2>Record once. Replay reliably.</h2>
+        <p class="lede">Three things have to be true for a macro to survive a page that's changed since you recorded it — Aperture is built around exactly these three.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <span class="step-num mono">01</span>
+          <h3>Record</h3>
+          <p>Click and type on any page. Every action is captured — including the real pauses between them, and steps that span multiple pages.</p>
+        </div>
+        <div class="step">
+          <span class="step-num mono">02</span>
+          <h3>Fingerprint, five ways</h3>
+          <p>Each element is remembered by id, aria-label, visible text, its position in the page's structure, and its on-screen location — a fallback chain, not a single brittle selector.</p>
+        </div>
+        <div class="step">
+          <span class="step-num mono">03</span>
+          <h3>Replay at 1×</h3>
+          <p>Playback reproduces the actual gaps between your actions, not a fixed rhythm — and follows navigations to new pages automatically.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="spec">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Under the hood</span>
+        <h2>The spec sheet</h2>
+      </div>
+      <div class="spec-sheet">
+        <div class="spec-row"><span class="spec-label">Selector fallback chain</span><span class="spec-value">id → aria/role → text → structure → position</span></div>
+        <div class="spec-row"><span class="spec-label">Capture surface</span><span class="spec-value">click · type · Enter/Tab/Esc · scroll</span></div>
+        <div class="spec-row"><span class="spec-label">Replay pacing</span><span class="spec-value">real recorded gaps, capped at 8s</span></div>
+        <div class="spec-row"><span class="spec-label">State ownership</span><span class="spec-value">service worker (survives navigation)</span></div>
+        <div class="spec-row"><span class="spec-label">Network calls, core loop</span><span class="spec-value">0</span></div>
+        <div class="spec-row"><span class="spec-label">End-to-end coverage</span><span class="spec-value">Playwright, full multi-page checkout</span></div>
+        <div class="spec-row"><span class="spec-label">Manifest</span><span class="spec-value">V3 · side panel UI</span></div>
+        <div class="spec-row"><span class="spec-label">Stack</span><span class="spec-value">TypeScript · React · Vite</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="lineup">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">The lineup</span>
+        <h2>What's built, what's next</h2>
+      </div>
+      <div class="lineup">
+        <div class="lineup-card current">
+          <span class="lineup-tag mono">V1 — now</span>
+          <h3>Deterministic recorder</h3>
+          <p>Record, resilient selector matching, 1× replay across page navigations. No AI in the loop — the strongest possible privacy claim there is.</p>
+        </div>
+        <div class="lineup-card">
+          <span class="lineup-tag mono">V2 — next</span>
+          <h3>On-device vision</h3>
+          <p>A small vision model running in-browser via WebGPU, as a fallback for canvas and shadow-DOM elements the deterministic path can't see.</p>
+        </div>
+        <div class="lineup-card">
+          <span class="lineup-tag mono">V3 — later</span>
+          <h3>Team &amp; scale</h3>
+          <p>Multi-tab orchestration, scheduled runs, and a shared macro library for teams who want this beyond a single machine.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap footer-row">
+    <span class="faint muted">Built as an independent project for SIH 2026 · MIT License</span>
+    <a href="https://github.com/Jaswanth-dev-69/aperture">github.com/Jaswanth-dev-69/aperture</a>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('iris');
+    var ctx = canvas.getContext('2d');
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function size() {
+      var dpr = window.devicePixelRatio || 1;
+      var cssSize = canvas.clientWidth || 380;
+      canvas.width = cssSize * dpr;
+      canvas.height = cssSize * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return cssSize;
+    }
+
+    function drawIris(cssSize, openness) {
+      var cx = cssSize / 2, cy = cssSize / 2;
+      var rOuter = cssSize * 0.46;
+      var rRim = cssSize * 0.48;
+      var N = 9;
+      var gap = 1.6 * Math.PI / 180;
+      var sector = (2 * Math.PI) / N;
+      var rHole = rOuter * (0.05 + 0.86 * openness);
+      var rot = sector * 0.55 * openness;
+
+      ctx.clearRect(0, 0, cssSize, cssSize);
+
+      // barrel
+      ctx.beginPath();
+      ctx.arc(cx, cy, rRim, 0, Math.PI * 2);
+      ctx.fillStyle = cssVar('--surface-2');
+      ctx.fill();
+
+      // blades
+      ctx.fillStyle = cssVar('--iris-blade');
+      for (var i = 0; i < N; i++) {
+        var a0 = i * sector + gap / 2 + rot;
+        var a1 = (i + 1) * sector - gap / 2 + rot;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOuter, a0, a1, false);
+        ctx.arc(cx, cy, rHole, a1, a0, true);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // rim ring
+      ctx.beginPath();
+      ctx.arc(cx, cy, rRim, 0, Math.PI * 2);
+      ctx.lineWidth = Math.max(1.5, cssSize * 0.006);
+      ctx.strokeStyle = cssVar('--iris-rim');
+      ctx.stroke();
+    }
+
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+    var cssSize = size();
+
+    if (reduceMotion) {
+      drawIris(cssSize, 1);
+    } else {
+      var start = null;
+      var duration = 1300;
+      function frame(ts) {
+        if (!start) start = ts;
+        var t = Math.min(1, (ts - start) / duration);
+        drawIris(cssSize, easeOutCubic(t));
+        if (t < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        cssSize = size();
+        drawIris(cssSize, 1);
+      }, 120);
+    });
+  })();
+</script>
