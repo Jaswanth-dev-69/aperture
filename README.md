@@ -63,17 +63,31 @@ structural tiebreak) → structural ancestor path → bounding-box proximity as 
 resort — and reproduces the *real* recorded pacing between actions (capped at 8s),
 not a fixed per-step delay.
 
+## About the official problem statement
+
+The product above is a deliberate **reframe** of SIH26171's literal text, not an
+implementation of it — the official spec asks for a client-side vision model that
+redacts PII before sending it to a server-side VLM, which returns commands for the
+client to execute. That's a different architecture from an on-device, no-server
+macro recorder. `extension/src/vision/` and `server/` are a separate, clearly
+labeled proof of concept that closes that gap for submission purposes — see
+[`extension/src/vision/README.md`](./extension/src/vision/README.md) for the exact
+spec-to-implementation mapping and its honest limitations. It does not change or
+depend on the main product above.
+
 ## Project layout
 
 ```
-extension/       The actual product — MV3 side panel, service worker, content script
-extension/e2e/   Playwright test: loads the real built extension, records and
-                 replays a full multi-page checkout against the practice site
-practice-site/   A small static fake shop (shop → product → cart → checkout →
-                 confirmation) used as a stable demo/test target
-landing/         The public-facing landing page
-sih_report.html  The research report that screened 172 SIH 2026 problem statements
-                 and selected this one — read it for the *why*
+extension/             The actual product — MV3 side panel, service worker, content script
+extension/e2e/         Playwright test: loads the real built extension, records and
+                        replays a full multi-page checkout against the practice site
+extension/src/vision/  SIH26171 spec-compliance demo (client-side vision + redaction)
+server/                ...and its server counterpart (local VLM via Ollama)
+practice-site/         A small static fake shop (shop → product → cart → checkout →
+                        confirmation) used as a stable demo/test target
+landing/                The public-facing landing page
+sih_report.html         The research report that screened 172 SIH 2026 problem statements
+                        and selected this one — read it for the *why*
 ```
 
 ## Running it locally
@@ -127,7 +141,8 @@ replay cycle reproduces the exact values that were recorded.
 | Playwright E2E | ✅ Done |
 | Landing page | ✅ Done |
 | Chrome Web Store listing | ⬜ Not submitted yet |
-| On-device vision fallback (V2) | ⬜ Not started |
+| SIH26171 spec-compliance demo (vision + redaction + local VLM) | ✅ Done, proof of concept |
+| On-device vision fallback for the main product (V2) | ⬜ Not started |
 
 See [`CLAUDE.md`](./CLAUDE.md) for the full build log and architecture notes.
 

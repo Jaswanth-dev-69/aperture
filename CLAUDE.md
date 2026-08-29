@@ -56,6 +56,27 @@ script. The fix was a full rearchitecture:
   codebase is prone to: anything that works for `<input>` needs to be checked against
   `<select>`/`<textarea>` too.
 
+## The literal SIH26171 spec vs. what's built
+
+Important, easy to forget: the product described above is a deliberate **reframe**
+of SIH26171's actual text, not an implementation of it (this was already the case
+in `sih_report.html`'s own original proposal — see its methodology section). The
+official spec requires a client-side ViT that redacts PII before sending visual
+context to a server-side LLM/VLM, which returns commands for the client to execute.
+That's a different architecture from an on-device, no-server macro recorder — as
+built, V1 satisfied **zero** of the PS's five "Expected Solution" components and
+none of its evaluation-rubric metrics were even measurable, because none of the
+underlying systems (vision model, redaction, server, VLM loop) existed.
+
+`extension/src/vision/` + `server/` closes that gap as a separate, clearly labeled
+**proof of concept** — real local ViT (YOLOS via WebGPU/WASM), real DOM+visual
+redaction, a real server calling a real local VLM (moondream via Ollama). It does
+not touch or depend on the main product. Read
+`extension/src/vision/README.md` for the exact spec-to-code mapping and its
+honestly-disclosed limitations (approximated face regions, a small VLM that
+doesn't reliably follow rigid output formats, etc.) before claiming spec
+compliance anywhere — it's a demo, not a production redaction system.
+
 ## Build plan status
 
 1. ✅ Scaffold (Vite + React + TS + `@crxjs/vite-plugin`, MV3 skeleton)
