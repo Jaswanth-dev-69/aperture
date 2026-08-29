@@ -79,10 +79,24 @@ window.addEventListener("scroll", onScroll, { passive: true });
 
 /* ------------------------------- execution -------------------------------- */
 
-const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-  window.HTMLInputElement.prototype,
-  "value",
-)?.set;
+/**
+ * Frameworks like React override the "value" property on the element
+ * *instance*, so a plain `el.value = x` can get silently ignored — the
+ * standard workaround is to call the *prototype's* native setter instead.
+ * <input>, <textarea> and <select> each define their own "value" descriptor
+ * on their own prototype; calling one on the wrong element type throws
+ * "Illegal invocation", so the setter must match the actual tag.
+ */
+function nativeValueSetter(el: Element): ((value: string) => void) | null {
+  const proto =
+    el.tagName === "TEXTAREA"
+      ? window.HTMLTextAreaElement.prototype
+      : el.tagName === "SELECT"
+        ? window.HTMLSelectElement.prototype
+        : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  return setter ? (value: string) => setter.call(el, value) : null;
+}
 
 function highlight(el: HTMLElement): () => void {
   const prevOutline = el.style.outline;
@@ -117,9 +131,10 @@ async function executeStep(step: MacroStep): Promise<{ ok: boolean; detail?: str
     if (step.type === "click") {
       el.click();
     } else if (step.type === "input") {
-      const input = el as HTMLInputElement;
+      const input = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
       input.focus();
-      if (nativeInputValueSetter) nativeInputValueSetter.call(input, step.value ?? "");
+      const setValue = nativeValueSetter(input);
+      if (setValue) setValue(step.value ?? "");
       else input.value = step.value ?? "";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
