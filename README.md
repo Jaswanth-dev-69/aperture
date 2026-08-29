@@ -1,5 +1,7 @@
 # Aperture
 
+[![CI](https://github.com/Jaswanth-dev-69/aperture/actions/workflows/ci.yml/badge.svg)](https://github.com/Jaswanth-dev-69/aperture/actions/workflows/ci.yml)
+
 **Privacy-first browser automation.** Aperture records what you do in the browser —
 clicks, typing, scrolling, whole multi-page checkout flows — and replays it later.
 No screenshot, no keystroke, no page content is ever sent anywhere. It happens on
@@ -10,7 +12,14 @@ Visual Perception for Light-weight Browser Agents*). The full research report be
 this product decision is in [`sih_report.html`](./sih_report.html).
 
 [**Landing page**](https://claude.ai/code/artifact/d026a37d-a4fa-42ba-adb4-02bdbc6e0e38) ·
+[**Download (.zip)**](https://github.com/Jaswanth-dev-69/aperture/releases/latest) ·
 [**License**](./LICENSE)
+
+Not yet on the Chrome Web Store (submission needs a developer account and manual
+review — see [`docs/chrome-web-store-listing.md`](./docs/chrome-web-store-listing.md)
+for the draft listing). Until then, grab the `.zip` from the
+[latest release](https://github.com/Jaswanth-dev-69/aperture/releases/latest) and
+load it unpacked (see below).
 
 ## Why on-device
 
@@ -69,17 +78,22 @@ sih_report.html  The research report that screened 172 SIH 2026 problem statemen
 
 ## Running it locally
 
+Either build from source:
+
 ```bash
 cd extension
 npm install
 npm run build
 ```
 
-Then load `extension/dist` as an unpacked extension:
+...or download and unzip the [latest release](https://github.com/Jaswanth-dev-69/aperture/releases/latest)
+instead of building — either way you end up with a folder to load unpacked.
+
+Then load it as an unpacked extension:
 
 1. Go to `brave://extensions` (or `chrome://extensions`)
 2. Enable **Developer mode**
-3. **Load unpacked** → select `extension/dist`
+3. **Load unpacked** → select `extension/dist` (or the unzipped release folder)
 4. Reload the extension after every rebuild, and refresh any already-open test tabs
 
 Try it against the practice site:
