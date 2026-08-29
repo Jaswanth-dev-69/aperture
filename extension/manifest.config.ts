@@ -25,7 +25,9 @@ export default defineManifest({
     {
       matches: ["<all_urls>"],
       js: ["src/content/content-script.ts"],
+      run_at: "document_start", // attach listeners before the page can fire events
+      all_frames: false,
     },
   ],
-  permissions: ["activeTab", "scripting", "sidePanel", "storage"],
+  permissions: ["activeTab", "scripting", "sidePanel", "storage", "tabs"],
 });

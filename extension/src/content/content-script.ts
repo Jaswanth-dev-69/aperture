@@ -1,147 +1,90 @@
 import { fingerprint, resolve } from "./selector-engine";
-import { appendRecordingStep, getRecordingSteps, recordingStorageKey } from "../recording-state";
-import { getReplayState, setReplayState } from "../replay-state";
-import { describeStep } from "../describe-step";
-import type { BackgroundMessage, BackgroundResponse, ContentMessage, RuntimeEvent } from "../messages";
-import type { Macro, MacroStep } from "../types";
+import type { TabStatus, ToBackground, ToContent } from "../messages";
+import type { MacroStep } from "../types";
 
-console.log("[Aperture] content script loaded on", location.href);
+/**
+ * The page side is deliberately stateless: it reports events to the service
+ * worker and executes steps the worker hands it. Listeners are attached
+ * immediately at load — gated only by a boolean — so nothing is missed while
+ * the worker is being asked whether this tab is recording.
+ */
 
-let myTabId: number | null = null;
 let recording = false;
 
-// chrome.storage's read-modify-write cycle isn't atomic: two rapid clicks can
-// both read the same list before either write lands, and one step silently
-// disappears. Chaining every append onto one promise forces them to happen
-// strictly one at a time.
-let writeQueue: Promise<void> = Promise.resolve();
-
-function enqueueStep(step: MacroStep): Promise<void> {
-  if (myTabId == null) return Promise.resolve();
-  const tabId = myTabId;
-  const task = writeQueue.then(async () => {
-    await appendRecordingStep(tabId, step);
-    sendRuntimeEvent({ type: "STEP_RECORDED", step });
-  });
-  writeQueue = task.catch(() => {});
-  return task;
+function send(message: ToBackground): Promise<unknown> {
+  return chrome.runtime.sendMessage(message).catch(() => undefined);
 }
 
-function isPlainLeftClick(e: MouseEvent): boolean {
-  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+function baseStep(type: MacroStep["type"]): MacroStep {
+  return { type, timestamp: Date.now(), url: location.href };
 }
 
-/** An <a href> click that will navigate *this* tab, tearing down this page context. */
-function findNavigatingAnchor(target: Element): HTMLAnchorElement | null {
-  const a = target.closest("a[href]") as HTMLAnchorElement | null;
-  if (!a) return null;
-  if (a.target && a.target !== "_self") return null; // opens elsewhere; this page survives
-  const href = a.getAttribute("href") ?? "";
-  if (!href || href.startsWith("#") || href.startsWith("javascript:")) return null;
-  return a;
-}
+/* ------------------------------- capture --------------------------------- */
 
-async function onClick(e: MouseEvent) {
-  if (!recording || myTabId == null) return;
+function onClick(e: MouseEvent) {
+  if (!recording) return;
   const target = e.target as Element | null;
   if (!target) return;
-
-  const step: MacroStep = { type: "click", fingerprint: fingerprint(target), timestamp: Date.now() };
-  const anchor = isPlainLeftClick(e) ? findNavigatingAnchor(target) : null;
-
-  if (anchor) {
-    // Hold the navigation until the step is actually persisted, since a
-    // pending storage write is not guaranteed to survive a page unload.
-    e.preventDefault();
-    await enqueueStep(step);
-    window.location.href = anchor.href;
-    return;
-  }
-
-  void enqueueStep(step);
+  void send({
+    type: "RECORD_STEP",
+    step: { ...baseStep("click"), fingerprint: fingerprint(target) },
+  });
 }
 
-function onChange(e: Event) {
-  if (!recording || myTabId == null) return;
-  const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+function onInput(e: Event) {
+  if (!recording) return;
+  const target = e.target as HTMLInputElement | HTMLTextAreaElement | null;
   if (!target) return;
-  if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA" && target.tagName !== "SELECT") return;
-  void enqueueStep({
-    type: "input",
-    fingerprint: fingerprint(target),
-    value: target.value,
-    timestamp: Date.now(),
+  const tag = target.tagName;
+  if (tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") return;
+  void send({
+    type: "RECORD_STEP",
+    step: { ...baseStep("input"), fingerprint: fingerprint(target), value: target.value },
   });
 }
 
-function attachListeners() {
-  document.addEventListener("click", onClick, true);
-  document.addEventListener("change", onChange, true);
-}
-
-function detachListeners() {
-  document.removeEventListener("click", onClick, true);
-  document.removeEventListener("change", onChange, true);
-}
-
-async function init() {
-  const res = (await chrome.runtime.sendMessage({ type: "WHOAMI" } satisfies BackgroundMessage)) as
-    | BackgroundResponse
-    | undefined;
-  myTabId = res?.tabId ?? null;
-  if (myTabId == null) return;
-
-  // Resume a recording that was already in progress before this page loaded
-  // (e.g. the user just navigated here mid-recording).
-  const existing = await getRecordingSteps(myTabId);
-  if (existing) {
-    recording = true;
-    attachListeners();
-  }
-
-  // Resume a replay that a navigating step interrupted on the previous page.
-  const pendingReplay = await getReplayState(myTabId);
-  if (pendingReplay && pendingReplay.nextIndex < pendingReplay.macro.steps.length) {
-    await delay(600); // let the freshly loaded page settle before acting on it
-    void replayMacro(pendingReplay.macro, pendingReplay.nextIndex);
-  } else if (pendingReplay) {
-    await setReplayState(myTabId, null);
-    sendRuntimeEvent({ type: "REPLAY_DONE" });
-  }
-
-  // Live toggle while this page instance stays alive (record started/stopped
-  // from the side panel without a navigation happening).
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "session" || myTabId == null) return;
-    const key = recordingStorageKey(myTabId);
-    if (!(key in changes)) return;
-    const isNowRecording = changes[key].newValue !== undefined;
-    if (isNowRecording && !recording) {
-      recording = true;
-      attachListeners();
-    } else if (!isNowRecording && recording) {
-      recording = false;
-      detachListeners();
-    }
+function onKeyDown(e: KeyboardEvent) {
+  if (!recording) return;
+  // Only keys that carry behavior on their own; ordinary typing is captured
+  // by the input handler as a single collapsed step.
+  if (e.key !== "Enter" && e.key !== "Escape" && e.key !== "Tab") return;
+  const target = e.target as Element | null;
+  void send({
+    type: "RECORD_STEP",
+    step: {
+      ...baseStep("key"),
+      fingerprint: target ? fingerprint(target) : undefined,
+      value: e.key,
+    },
   });
 }
+
+let scrollTimer: number | undefined;
+function onScroll() {
+  if (!recording) return;
+  window.clearTimeout(scrollTimer);
+  scrollTimer = window.setTimeout(() => {
+    void send({
+      type: "RECORD_STEP",
+      step: { ...baseStep("scroll"), scroll: { x: window.scrollX, y: window.scrollY } },
+    });
+  }, 250);
+}
+
+document.addEventListener("click", onClick, true);
+document.addEventListener("input", onInput, true);
+document.addEventListener("change", onInput, true);
+document.addEventListener("keydown", onKeyDown, true);
+window.addEventListener("scroll", onScroll, { passive: true });
+
+/* ------------------------------- execution -------------------------------- */
+
 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
   window.HTMLInputElement.prototype,
   "value",
 )?.set;
 
-function delay(ms: number) {
-  return new Promise((res) => setTimeout(res, ms));
-}
-
-function sendRuntimeEvent(event: RuntimeEvent) {
-  chrome.runtime.sendMessage(event).catch(() => {
-    // Side panel may be closed — nothing to do.
-  });
-}
-
-/** Outline the element being replayed so a human watching can follow along. */
-function highlightElement(el: HTMLElement): () => void {
+function highlight(el: HTMLElement): () => void {
   const prevOutline = el.style.outline;
   const prevOffset = el.style.outlineOffset;
   el.style.outline = "3px solid #4FD1C0";
@@ -152,81 +95,70 @@ function highlightElement(el: HTMLElement): () => void {
   };
 }
 
-/** True once the page has started tearing down for a navigation. */
-let unloading = false;
-window.addEventListener("beforeunload", () => {
-  unloading = true;
-});
-
-async function replayMacro(macro: Macro, startIndex: number) {
-  if (myTabId == null) return;
-  const tabId = myTabId;
-  const macroSteps = macro.steps;
-  const total = macroSteps.length;
-
-  for (let i = startIndex; i < total; i++) {
-    const step = macroSteps[i];
-    const description = describeStep(step);
-
-    // Persist progress *before* acting: if this step navigates, the next
-    // page's content script picks up exactly here.
-    await setReplayState(tabId, { macro, nextIndex: i + 1 });
-
-    const el = resolve(step.fingerprint) as HTMLElement | null;
-    if (!el) {
-      sendRuntimeEvent({
-        type: "REPLAY_STEP",
-        index: i,
-        total,
-        status: "failed",
-        description: `${description} — element not found`,
-      });
-      continue;
-    }
-
-    el.scrollIntoView({ block: "center" });
-    const restoreHighlight = highlightElement(el);
-    sendRuntimeEvent({ type: "REPLAY_STEP", index: i, total, status: "running", description });
-    await delay(300); // let the highlight register before acting
-
-    try {
-      if (step.type === "click") {
-        el.click();
-      } else {
-        const inputEl = el as HTMLInputElement;
-        if (nativeInputValueSetter) nativeInputValueSetter.call(inputEl, step.value ?? "");
-        else inputEl.value = step.value ?? "";
-        inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-        inputEl.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      sendRuntimeEvent({ type: "REPLAY_STEP", index: i, total, status: "ok", description });
-    } catch (err) {
-      sendRuntimeEvent({
-        type: "REPLAY_STEP",
-        index: i,
-        total,
-        status: "failed",
-        description: `${description} — ${(err as Error).message}`,
-      });
-    }
-
-    await delay(400);
-    // The click triggered a navigation: stop here and let the next page's
-    // content script resume from the persisted index.
-    if (unloading) return;
-    restoreHighlight();
-    await delay(150);
-  }
-
-  await setReplayState(tabId, null);
-  sendRuntimeEvent({ type: "REPLAY_DONE" });
+function delay(ms: number) {
+  return new Promise((res) => setTimeout(res, ms));
 }
 
-chrome.runtime.onMessage.addListener((message: ContentMessage, _sender, sendResponse: (r: { type: "ACK" }) => void) => {
-  if (message.type === "REPLAY_MACRO") {
-    void replayMacro(message.macro, 0);
-    sendResponse({ type: "ACK" });
+async function executeStep(step: MacroStep): Promise<{ ok: boolean; detail?: string }> {
+  if (step.type === "scroll") {
+    window.scrollTo({ left: step.scroll?.x ?? 0, top: step.scroll?.y ?? 0, behavior: "smooth" });
+    return { ok: true };
+  }
+
+  if (!step.fingerprint) return { ok: false, detail: "step has no target" };
+  const el = resolve(step.fingerprint) as HTMLElement | null;
+  if (!el) return { ok: false, detail: "element not found on this page" };
+
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  const restore = highlight(el);
+  await delay(180); // make the highlight visible before acting
+
+  try {
+    if (step.type === "click") {
+      el.click();
+    } else if (step.type === "input") {
+      const input = el as HTMLInputElement;
+      input.focus();
+      if (nativeInputValueSetter) nativeInputValueSetter.call(input, step.value ?? "");
+      else input.value = step.value ?? "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (step.type === "key") {
+      const key = step.value ?? "Enter";
+      el.focus();
+      for (const type of ["keydown", "keypress", "keyup"] as const) {
+        el.dispatchEvent(new KeyboardEvent(type, { key, bubbles: true, cancelable: true }));
+      }
+      // Enter in a field usually means "submit this form".
+      if (key === "Enter") {
+        const form = (el as HTMLInputElement).form;
+        if (form) form.requestSubmit?.();
+      }
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, detail: (err as Error).message };
+  } finally {
+    setTimeout(restore, 350);
+  }
+}
+
+/* ------------------------------- lifecycle -------------------------------- */
+
+chrome.runtime.onMessage.addListener((message: ToContent, _sender, sendResponse) => {
+  if (message.type === "SET_RECORDING") {
+    recording = message.recording;
+    sendResponse({ ok: true });
+    return;
+  }
+  if (message.type === "EXECUTE_STEP") {
+    void executeStep(message.step).then(sendResponse);
+    return true; // async response
   }
 });
 
-void init();
+// Announce this page and pick up any recording/replay already in flight.
+void (async () => {
+  const status = (await send({ type: "CONTENT_READY", url: location.href })) as TabStatus | undefined;
+  if (status?.recording) recording = true;
+})();

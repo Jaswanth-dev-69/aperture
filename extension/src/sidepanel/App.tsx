@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 import type { Macro } from "../types";
-import type { ContentMessage, RuntimeEvent } from "../messages";
+import type { PanelState, StopRecordingResult, ToBackground, ToPanel } from "../messages";
 import { deleteMacro, getMacros, saveMacro } from "./storage";
-import { beginRecording, endRecording } from "../recording-state";
 import { describeStep } from "../describe-step";
 
-function delay(ms: number) {
-  return new Promise((res) => setTimeout(res, ms));
+function send<T>(message: ToBackground): Promise<T | undefined> {
+  return chrome.runtime.sendMessage(message).catch(() => undefined);
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab | null> {
@@ -19,114 +18,129 @@ async function getActiveTab(): Promise<chrome.tabs.Tab | null> {
 function isRestrictedUrl(url: string | undefined): boolean {
   if (!url) return true;
   return (
-    /^(chrome|brave|edge|about|devtools|view-source):/i.test(url) ||
+    /^(chrome|brave|edge|about|devtools|view-source|file):/i.test(url) ||
     url.startsWith("https://chromewebstore.google.com/") ||
     url.startsWith("https://chrome.google.com/webstore")
   );
 }
 
-/**
- * chrome.tabs.sendMessage rejects with "Receiving end does not exist" whenever
- * the target tab has no live content script — a restricted page, or a page that
- * loaded before the extension was last reloaded. Surface that as a usable
- * message instead of an unhandled rejection.
- */
-async function sendToContentScript(tabId: number, message: ContentMessage): Promise<void> {
-  try {
-    await chrome.tabs.sendMessage(tabId, message);
-  } catch {
-    throw new Error(
-      "Aperture isn't active on this page. Reload the page and try again — extensions can't run on browser or Web Store pages.",
-    );
-  }
-}
-
 function App() {
   const [macros, setMacros] = useState<Macro[]>([]);
   const [recording, setRecording] = useState(false);
-  const [stopping, setStopping] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [log, setLog] = useState<string[]>([]);
-  const [recordingFeed, setRecordingFeed] = useState<string[]>([]);
+  const [feed, setFeed] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const recordingTabId = useRef<number | null>(null);
+  const activeTabId = useRef<number | null>(null);
+  const feedRef = useRef<HTMLUListElement | null>(null);
 
-  useEffect(() => {
-    getMacros().then(setMacros);
+  const refreshMacros = useCallback(async () => setMacros(await getMacros()), []);
+
+  // Re-sync with the service worker, which is the source of truth — the panel
+  // can be closed and reopened mid-recording.
+  const syncState = useCallback(async () => {
+    const tab = await getActiveTab();
+    activeTabId.current = tab?.id ?? null;
+    if (tab?.id == null) return;
+    const state = await send<PanelState>({ type: "GET_PANEL_STATE", tabId: tab.id });
+    if (!state) return;
+    setRecording(state.recording);
+    setReplaying(state.replaying);
+    setFeed(state.recordedSteps.map(describeStep));
   }, []);
 
   useEffect(() => {
-    function onMessage(message: RuntimeEvent) {
+    void refreshMacros();
+    void syncState();
+  }, [refreshMacros, syncState]);
+
+  useEffect(() => {
+    function onMessage(message: ToPanel) {
       if (message.type === "STEP_RECORDED") {
-        setRecordingFeed((prev) => [...prev, describeStep(message.step)]);
-      } else if (message.type === "REPLAY_STEP") {
-        const tag = message.status === "failed" ? "FAILED" : message.status === "ok" ? "OK" : "...";
-        setLog((prev) => [...prev, `[${message.index + 1}/${message.total}] ${tag} — ${message.description}`]);
+        setFeed((prev) => [...prev, describeStep(message.step)]);
+      } else if (message.type === "REPLAY_PROGRESS") {
+        const tag = message.status === "failed" ? "✕" : message.status === "ok" ? "✓" : "▸";
+        setLog((prev) => {
+          const line = `${tag} [${message.index + 1}/${message.total}] ${message.description}`;
+          // Replace the in-progress line for this step rather than duplicating it.
+          const prefix = `▸ [${message.index + 1}/${message.total}]`;
+          const withoutRunning = prev.filter((l) => !l.startsWith(prefix));
+          return [...withoutRunning, line];
+        });
       } else if (message.type === "REPLAY_DONE") {
         setReplaying(false);
+        setLog((prev) => [...prev, message.aborted ? "— Stopped —" : "— Finished —"]);
       }
     }
     chrome.runtime.onMessage.addListener(onMessage);
     return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, []);
 
+  useEffect(() => {
+    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
+  }, [feed]);
+
   async function handleStartRecording() {
     setError(null);
     const tab = await getActiveTab();
-    if (!tab?.id) return;
+    if (tab?.id == null) return;
     if (isRestrictedUrl(tab.url)) {
-      setError("Aperture can't record on browser or Web Store pages. Open a regular website first.");
+      setError("Aperture can't run on browser or Web Store pages. Open a regular website first.");
       return;
     }
-    recordingTabId.current = tab.id;
-    setRecordingFeed([]);
-    await beginRecording(tab.id);
+    activeTabId.current = tab.id;
+    setFeed([]);
+    setLog([]);
+    await send({ type: "START_RECORDING", tabId: tab.id });
     setRecording(true);
   }
 
   async function handleStopRecording() {
-    const tabId = recordingTabId.current;
-    if (!tabId) return;
-    setStopping(true);
-    // Give the most recent click's storage write time to land before we
-    // read the final list — it's an async round trip to the page.
-    await delay(300);
-    const steps = await endRecording(tabId);
+    const tabId = activeTabId.current;
+    if (tabId == null) return;
+    const result = await send<StopRecordingResult>({ type: "STOP_RECORDING", tabId });
     setRecording(false);
-    setStopping(false);
+    const steps = result?.steps ?? [];
     if (steps.length === 0) {
-      window.alert("No actions were recorded.");
+      setError("No actions were captured. Make sure you interact with the page while recording.");
       return;
     }
-
     const name = window.prompt("Name this macro:", `Macro ${macros.length + 1}`);
     if (!name) return;
-    const macro: Macro = { id: crypto.randomUUID(), name, createdAt: Date.now(), steps };
-    await saveMacro(macro);
-    setMacros(await getMacros());
+    await saveMacro({
+      id: crypto.randomUUID(),
+      name,
+      createdAt: Date.now(),
+      startUrl: result?.startUrl ?? "",
+      steps,
+    });
+    await refreshMacros();
   }
 
   async function handleReplay(macro: Macro) {
     setError(null);
     const tab = await getActiveTab();
-    if (!tab?.id) return;
+    if (tab?.id == null) return;
     if (isRestrictedUrl(tab.url)) {
       setError("Aperture can't run on browser or Web Store pages. Open a regular website first.");
       return;
     }
+    activeTabId.current = tab.id;
     setLog([]);
     setReplaying(true);
-    try {
-      await sendToContentScript(tab.id, { type: "REPLAY_MACRO", macro });
-    } catch (err) {
-      setReplaying(false);
-      setError((err as Error).message);
-    }
+    await send({ type: "START_REPLAY", tabId: tab.id, macro });
+  }
+
+  async function handleAbort() {
+    const tabId = activeTabId.current;
+    if (tabId == null) return;
+    await send({ type: "ABORT_REPLAY", tabId });
+    setReplaying(false);
   }
 
   async function handleDelete(id: string) {
     await deleteMacro(id);
-    setMacros(await getMacros());
+    await refreshMacros();
   }
 
   return (
@@ -138,7 +152,7 @@ function App() {
 
       {error && (
         <div className="error-banner">
-          {error}
+          <span>{error}</span>
           <button className="error-dismiss" onClick={() => setError(null)} aria-label="Dismiss">
             ×
           </button>
@@ -151,18 +165,25 @@ function App() {
             ● Record new macro
           </button>
         ) : (
-          <button className="btn btn-stop" onClick={handleStopRecording} disabled={stopping}>
-            {stopping ? "Finishing…" : "■ Stop recording"}
+          <button className="btn btn-stop" onClick={handleStopRecording}>
+            ■ Stop recording
           </button>
         )}
+        {replaying && (
+          <button className="btn btn-stop" onClick={handleAbort} style={{ marginLeft: 8 }}>
+            ■ Stop replay
+          </button>
+        )}
+
         {recording && (
           <>
             <p className="hint">
-              Click and type on the page — every action is captured live below, even across page navigations.
+              Clicks, typing, Enter/Tab/Escape and scrolling are captured live — across page
+              navigations too.
             </p>
-            <ul className="log-list feed">
-              {recordingFeed.length === 0 && <li className="empty">Waiting for your first action…</li>}
-              {recordingFeed.map((line, i) => (
+            <ul className="log-list feed" ref={feedRef}>
+              {feed.length === 0 && <li className="empty">Waiting for your first action…</li>}
+              {feed.map((line, i) => (
                 <li key={i}>
                   {i + 1}. {line}
                 </li>
