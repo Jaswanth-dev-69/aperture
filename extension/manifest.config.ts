@@ -30,4 +30,14 @@ export default defineManifest({
     },
   ],
   permissions: ["activeTab", "scripting", "sidePanel", "storage", "tabs"],
+  // Needed for chrome.tabs.captureVisibleTab() (the vision-agent demo) to
+  // work reliably regardless of activeTab's gesture-scoped grant timing —
+  // content_scripts already inject at this same <all_urls> breadth.
+  host_permissions: ["<all_urls>"],
+  // MV3's default CSP omits 'wasm-unsafe-eval', so any WebAssembly module —
+  // here, onnxruntime-web's local inference engine for the vision-agent demo
+  // — fails to compile without this explicit override.
+  content_security_policy: {
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+  },
 });

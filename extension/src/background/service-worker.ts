@@ -315,6 +315,23 @@ chrome.runtime.onMessage.addListener((message: ToBackground, sender, sendRespons
         } satisfies PanelState);
         return;
       }
+
+      // Relayed straight through to the content script — the worker doesn't
+      // need to own state for these, just the tab id to route to.
+      case "GET_SCREEN_CONTEXT": {
+        const context = await toContent(message.tabId, { type: "GET_SCREEN_CONTEXT" }).catch(() => null);
+        sendResponse(context);
+        return;
+      }
+
+      case "FIND_ELEMENT_BY_DESCRIPTION": {
+        const result = await toContent(message.tabId, {
+          type: "FIND_ELEMENT_BY_DESCRIPTION",
+          description: message.description,
+        }).catch(() => ({ found: false }));
+        sendResponse(result);
+        return;
+      }
     }
   })();
 

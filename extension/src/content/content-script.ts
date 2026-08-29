@@ -1,5 +1,12 @@
 import { fingerprint, resolve } from "./selector-engine";
-import type { TabStatus, ToBackground, ToContent } from "../messages";
+import type {
+  FindElementResult,
+  ScreenContext,
+  SensitiveRegion,
+  TabStatus,
+  ToBackground,
+  ToContent,
+} from "../messages";
 import type { MacroStep } from "../types";
 
 /**
@@ -158,6 +165,128 @@ async function executeStep(step: MacroStep): Promise<{ ok: boolean; detail?: str
   }
 }
 
+/* ---------------------------- vision-agent demo ---------------------------- */
+/**
+ * Supports the SIH26171 spec-compliance demo (see vision/README.md): DOM
+ * fields known to carry sensitive input are reported so the side panel can
+ * black them out of a screenshot before it ever leaves the device, and a
+ * server-returned natural-language target ("the Search button") is resolved
+ * back to a real element the same way a human would read it.
+ */
+
+const SENSITIVE_RULES: Array<{ selector: string; kind: string }> = [
+  { selector: 'input[type="password"]', kind: "password" },
+  { selector: 'input[autocomplete="current-password"], input[autocomplete="new-password"]', kind: "password" },
+  { selector: 'input[autocomplete*="cc-"]', kind: "payment" },
+  { selector: 'input[type="email"], input[autocomplete="email"]', kind: "email" },
+  { selector: 'input[type="tel"], input[autocomplete*="tel"]', kind: "phone" },
+  { selector: 'input[name*="ssn" i], input[id*="ssn" i]', kind: "id-number" },
+];
+
+function detectSensitiveRegions(): SensitiveRegion[] {
+  const seen = new Set<Element>();
+  const regions: SensitiveRegion[] = [];
+  for (const { selector, kind } of SENSITIVE_RULES) {
+    let matches: NodeListOf<Element>;
+    try {
+      matches = document.querySelectorAll(selector);
+    } catch {
+      continue;
+    }
+    matches.forEach((el) => {
+      if (seen.has(el)) return;
+      seen.add(el);
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      regions.push({ x: r.x, y: r.y, width: r.width, height: r.height, kind });
+    });
+  }
+  return regions;
+}
+
+function elementLabel(el: Element): string {
+  const aria = el.getAttribute("aria-label");
+  if (aria) return aria;
+  const text = (el.textContent || "").trim();
+  if (text) return text.slice(0, 80);
+  const placeholder = (el as HTMLInputElement).placeholder;
+  if (placeholder) return placeholder;
+  return el.tagName.toLowerCase();
+}
+
+/** Labels only, never `.value` — this is the channel the PS allows sending
+ * to a server unredacted ("structure of the screen, application fields"). */
+function buildStructuralSummary(limit = 40): string[] {
+  const items: string[] = [];
+  document
+    .querySelectorAll('button, a, input, select, textarea, [role="button"], h1, h2, h3')
+    .forEach((el) => {
+      if (items.length >= limit) return;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "input" && (el as HTMLInputElement).type === "password") {
+        items.push("input: (password field, value withheld)");
+        return;
+      }
+      items.push(`${tag}: ${elementLabel(el)}`);
+    });
+  return items;
+}
+
+function getScreenContext(): ScreenContext {
+  return {
+    sensitiveRegions: detectSensitiveRegions(),
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    structuralSummary: buildStructuralSummary(),
+  };
+}
+
+/** Cheap token-overlap score — good enough to disambiguate a short VLM
+ * description like "the blue Search button" against real page labels. */
+function scoreMatch(label: string, description: string): number {
+  const l = label.toLowerCase();
+  const d = description.toLowerCase();
+  if (!d) return 0; // "".includes("") below would otherwise match everything
+  if (l === d) return 1000;
+  if (l.includes(d) || d.includes(l)) return 100 + Math.min(l.length, d.length);
+  const lTokens = new Set(l.split(/\W+/).filter(Boolean));
+  let overlap = 0;
+  for (const t of d.split(/\W+/).filter(Boolean)) if (lTokens.has(t)) overlap++;
+  return overlap;
+}
+
+async function findAndClickByDescription(description: string): Promise<FindElementResult> {
+  // Guard first: String.includes("") is always true, so an empty description
+  // would otherwise "match" every element on the page at a positive score.
+  if (!description.trim()) return { found: false };
+
+  const candidates = document.querySelectorAll(
+    'button, a, input, select, textarea, [role="button"], [onclick]',
+  );
+  let best: Element | null = null;
+  let bestScore = 0;
+  candidates.forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const score = scoreMatch(elementLabel(el), description);
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  if (!best || bestScore <= 0) return { found: false };
+
+  const el = best as HTMLElement;
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  const restore = highlight(el);
+  await delay(400);
+  el.click();
+  setTimeout(restore, 600);
+  return { found: true, label: elementLabel(el) };
+}
+
 /* ------------------------------- lifecycle -------------------------------- */
 
 chrome.runtime.onMessage.addListener((message: ToContent, _sender, sendResponse) => {
@@ -168,6 +297,14 @@ chrome.runtime.onMessage.addListener((message: ToContent, _sender, sendResponse)
   }
   if (message.type === "EXECUTE_STEP") {
     void executeStep(message.step).then(sendResponse);
+    return true; // async response
+  }
+  if (message.type === "GET_SCREEN_CONTEXT") {
+    sendResponse(getScreenContext());
+    return;
+  }
+  if (message.type === "FIND_ELEMENT_BY_DESCRIPTION") {
+    void findAndClickByDescription(message.description).then(sendResponse);
     return true; // async response
   }
 });

@@ -24,6 +24,100 @@
   font-size: 12px;
 }
 
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #2a342e;
+}
+
+.view-tabs button {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #7c8c86;
+  padding: 8px 4px 10px;
+  margin-right: 14px;
+  cursor: pointer;
+}
+
+.view-tabs button.active {
+  color: #4fd1c0;
+  border-bottom-color: #4fd1c0;
+}
+
+.vision-agent .hint {
+  margin-bottom: 14px;
+}
+
+.vision-agent code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 11px;
+  background: #171f1b;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.vision-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.vision-compare img {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #2a342e;
+  display: block;
+}
+
+.vision-label {
+  display: block;
+  font-size: 10.5px;
+  color: #7c8c86;
+  margin-bottom: 5px;
+}
+
+.vision-stats {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #aab8b1;
+}
+
+.vision-task {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.vision-task input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #2a342e;
+  background: #171f1b;
+  color: #e7ede9;
+}
+
+.vision-decision {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #2a342e;
+  border-radius: 8px;
+  background: #171f1b;
+}
+
+.vision-decision p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 .btn {
   font-family: inherit;
   font-size: 13px;

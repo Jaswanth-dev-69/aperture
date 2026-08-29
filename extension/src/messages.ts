@@ -6,6 +6,16 @@ import type { Macro, MacroStep } from "./types";
  * from `sender.tab`, so no component ever has to look up its own identity.
  */
 
+/** A DOM element the page itself knows carries sensitive input — reused for
+ * visual redaction, the same way selector-engine reuses bounding boxes. */
+export interface SensitiveRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: string;
+}
+
 /** content script or side panel -> service worker */
 export type ToBackground =
   | { type: "RECORD_STEP"; step: MacroStep }
@@ -16,7 +26,20 @@ export type ToBackground =
   | { type: "STOP_RECORDING"; tabId: number }
   | { type: "START_REPLAY"; tabId: number; macro: Macro }
   | { type: "ABORT_REPLAY"; tabId: number }
-  | { type: "GET_PANEL_STATE"; tabId: number };
+  | { type: "GET_PANEL_STATE"; tabId: number }
+  | { type: "GET_SCREEN_CONTEXT"; tabId: number }
+  | { type: "FIND_ELEMENT_BY_DESCRIPTION"; tabId: number; description: string };
+
+/** Everything the vision-agent demo needs from a page in one round trip:
+ * sensitive regions (for local redaction, never sent anywhere) and a
+ * structural summary of labels only — never field values — which the PS
+ * itself allows sending to a server unredacted. */
+export interface ScreenContext {
+  sensitiveRegions: SensitiveRegion[];
+  viewportWidth: number;
+  viewportHeight: number;
+  structuralSummary: string[];
+}
 
 export interface TabStatus {
   recording: boolean;
@@ -37,7 +60,14 @@ export interface StopRecordingResult {
 /** service worker -> content script */
 export type ToContent =
   | { type: "SET_RECORDING"; recording: boolean }
-  | { type: "EXECUTE_STEP"; step: MacroStep; index: number; total: number };
+  | { type: "EXECUTE_STEP"; step: MacroStep; index: number; total: number }
+  | { type: "GET_SCREEN_CONTEXT" }
+  | { type: "FIND_ELEMENT_BY_DESCRIPTION"; description: string };
+
+export interface FindElementResult {
+  found: boolean;
+  label?: string;
+}
 
 /** service worker -> side panel (broadcast) */
 export type ToPanel =

@@ -4,6 +4,7 @@ import type { Macro } from "../types";
 import type { PanelState, StopRecordingResult, ToBackground, ToPanel } from "../messages";
 import { deleteMacro, getMacros, saveMacro } from "./storage";
 import { describeStep } from "../describe-step";
+import { VisionAgent } from "./VisionAgent";
 
 function send<T>(message: ToBackground): Promise<T | undefined> {
   return chrome.runtime.sendMessage(message).catch(() => undefined);
@@ -25,6 +26,7 @@ function isRestrictedUrl(url: string | undefined): boolean {
 }
 
 function App() {
+  const [view, setView] = useState<"record" | "vision">("record");
   const [macros, setMacros] = useState<Macro[]>([]);
   const [recording, setRecording] = useState(false);
   const [replaying, setReplaying] = useState(false);
@@ -150,91 +152,106 @@ function App() {
         <p className="tagline">Record and replay browser macros — entirely on-device.</p>
       </header>
 
-      {error && (
-        <div className="error-banner">
-          <span>{error}</span>
-          <button className="error-dismiss" onClick={() => setError(null)} aria-label="Dismiss">
-            ×
-          </button>
-        </div>
-      )}
+      <nav className="view-tabs">
+        <button className={view === "record" ? "active" : ""} onClick={() => setView("record")}>
+          Record &amp; Replay
+        </button>
+        <button className={view === "vision" ? "active" : ""} onClick={() => setView("vision")}>
+          Vision Agent (SIH demo)
+        </button>
+      </nav>
 
-      <section className="recorder">
-        {!recording ? (
-          <button className="btn btn-primary" onClick={handleStartRecording} disabled={replaying}>
-            ● Record new macro
-          </button>
-        ) : (
-          <button className="btn btn-stop" onClick={handleStopRecording}>
-            ■ Stop recording
-          </button>
-        )}
-        {replaying && (
-          <button className="btn btn-stop" onClick={handleAbort} style={{ marginLeft: 8 }}>
-            ■ Stop replay
-          </button>
-        )}
+      {view === "vision" ? (
+        <VisionAgent />
+      ) : (
+        <>
+          {error && (
+            <div className="error-banner">
+              <span>{error}</span>
+              <button className="error-dismiss" onClick={() => setError(null)} aria-label="Dismiss">
+                ×
+              </button>
+            </div>
+          )}
 
-        {recording && (
-          <>
-            <p className="hint">
-              Clicks, typing, Enter/Tab/Escape and scrolling are captured live — across page
-              navigations too.
-            </p>
-            <ul className="log-list feed" ref={feedRef}>
-              {feed.length === 0 && <li className="empty">Waiting for your first action…</li>}
-              {feed.map((line, i) => (
-                <li key={i}>
-                  {i + 1}. {line}
+          <section className="recorder">
+            {!recording ? (
+              <button className="btn btn-primary" onClick={handleStartRecording} disabled={replaying}>
+                ● Record new macro
+              </button>
+            ) : (
+              <button className="btn btn-stop" onClick={handleStopRecording}>
+                ■ Stop recording
+              </button>
+            )}
+            {replaying && (
+              <button className="btn btn-stop" onClick={handleAbort} style={{ marginLeft: 8 }}>
+                ■ Stop replay
+              </button>
+            )}
+
+            {recording && (
+              <>
+                <p className="hint">
+                  Clicks, typing, Enter/Tab/Escape and scrolling are captured live — across page
+                  navigations too.
+                </p>
+                <ul className="log-list feed" ref={feedRef}>
+                  {feed.length === 0 && <li className="empty">Waiting for your first action…</li>}
+                  {feed.map((line, i) => (
+                    <li key={i}>
+                      {i + 1}. {line}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+
+          <section className="macros">
+            <h2>Saved macros</h2>
+            {macros.length === 0 && <p className="empty">No macros yet — record one above.</p>}
+            <ul className="macro-list">
+              {macros.map((m) => (
+                <li key={m.id} className="macro-item">
+                  <div className="macro-info">
+                    <b>{m.name}</b>
+                    <span>
+                      {m.steps.length} step{m.steps.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <div className="macro-actions">
+                    <button
+                      className="btn btn-small"
+                      onClick={() => handleReplay(m)}
+                      disabled={recording || replaying}
+                    >
+                      ▶ Run
+                    </button>
+                    <button
+                      className="btn btn-small btn-danger"
+                      onClick={() => handleDelete(m.id)}
+                      disabled={recording || replaying}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
-          </>
-        )}
-      </section>
+          </section>
 
-      <section className="macros">
-        <h2>Saved macros</h2>
-        {macros.length === 0 && <p className="empty">No macros yet — record one above.</p>}
-        <ul className="macro-list">
-          {macros.map((m) => (
-            <li key={m.id} className="macro-item">
-              <div className="macro-info">
-                <b>{m.name}</b>
-                <span>
-                  {m.steps.length} step{m.steps.length === 1 ? "" : "s"}
-                </span>
-              </div>
-              <div className="macro-actions">
-                <button
-                  className="btn btn-small"
-                  onClick={() => handleReplay(m)}
-                  disabled={recording || replaying}
-                >
-                  ▶ Run
-                </button>
-                <button
-                  className="btn btn-small btn-danger"
-                  onClick={() => handleDelete(m.id)}
-                  disabled={recording || replaying}
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {log.length > 0 && (
-        <section className="log">
-          <h2>Action log</h2>
-          <ul className="log-list">
-            {log.map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
-          </ul>
-        </section>
+          {log.length > 0 && (
+            <section className="log">
+              <h2>Action log</h2>
+              <ul className="log-list">
+                {log.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
