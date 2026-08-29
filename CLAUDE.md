@@ -1,103 +1,85 @@
 # Aperture — SIH 2026 (SIH26171)
 
-## What this repo is, right now
+## What this repo is
 
-This directory currently holds one file: `sih_report.html` ("The Aperture Brief") — a
-self-contained research report that screened all 172 Smart India Hackathon 2026
-Software problem statements and landed on a final build recommendation. There is no
-code yet. This CLAUDE.md exists to carry that decision forward into the build phase.
+A working Chrome/Brave extension (Manifest V3) plus its supporting artifacts:
 
-Open `sih_report.html` in a browser to read the full reasoning, scoring tables, and
-runner-up analysis. Summary below so future sessions don't need to re-read it in full.
+- `extension/` — the actual product: React side panel, service worker, content script.
+- `practice-site/` — a small static fake-shop site (shop → product → cart → checkout →
+  confirmation) used as a stable demo/test target instead of a real website.
+- `extension/e2e/` — a Playwright test that loads the real built extension, records a
+  full multi-page checkout on the practice site, and replays it.
+- `landing/index.html` — the public-facing landing page (also published as an Artifact).
+- `sih_report.html` — "The Aperture Brief," the original research report that screened
+  all 172 SIH 2026 software problem statements and selected this one. Read it for the
+  *why* behind the product decision; it is not re-litigated here.
+- GitHub: https://github.com/Jaswanth-dev-69/aperture (public).
 
-## The decision
+## The decision (unchanged from the report)
 
-**Build Aperture**: a privacy-first Chrome extension that performs on-device UI
-perception and web automation, mapped to problem statement **SIH26171 — "On-device
-Visual Perception for Light-weight Browser Agents"** (sponsor: ISRO).
+**Aperture**: a privacy-first Chrome extension that records browser macros (click, type,
+scroll) and replays them, mapped to problem statement **SIH26171** (ISRO). Everything in
+V1 runs on-device with zero network calls in the core loop — no AI yet, which is itself
+the strongest form of the privacy claim. Full reasoning and runner-up comparison in
+`sih_report.html` §5–7.
 
-Core idea: record a macro by performing a task once (click, type, extract) → Aperture
-grounds it in the DOM/accessibility tree using resilient multi-strategy selectors
-(id → aria-label → text → visual position) → replay on demand. All inference — the
-optional vision fallback for canvas/shadow-DOM pages, and the optional local LLM
-planner — runs entirely on-device via WebGPU/WASM (ONNX Runtime Web, Transformers.js,
-WebLLM). No screenshot or DOM snapshot is ever sent to a server unless the user
-explicitly opts into a disclosed, text-only cloud fallback for ambiguous task parsing.
+## Architecture, as actually built (not as originally planned)
 
-**Why this over the other candidates** (full comparison in report §5–7): Aperture is
-the only top-scoring statement that is *natively* a browser-extension + frontend +
-client-side-ML project, matching the stated goal of building in that specific
-intersection — not an adjacent one (backend/data-heavy projects like CryptoRadar and
-ChainTrace scored close but under-serve the frontend/extension priority). It also
-rides the live 2025–26 industry wave of agentic browsers (Claude for Chrome, OpenAI
-Atlas, Perplexity Comet) with a differentiated "local-first, privacy-by-architecture"
-angle.
+The single biggest lesson from building this: **a page is destroyed on every
+navigation, so it cannot hold state.** Every early bug (recording losing steps,
+replay stopping after a few actions) traced back to state living in the content
+script. The fix was a full rearchitecture:
 
-**Discarded initial picks**: SIH26125 (blockchain identity — saturated genre),
-SIH26149 (disk-forensics tool — fails the "must have a live demo URL" requirement),
-SIH26136 (procurement portal — plain CRUD), SIH26227 (does not exist in the 226-PS
-catalog).
+- **The service worker owns all state** (`extension/src/background/service-worker.ts`).
+  It's the only component that survives navigation, and it gets the sender's tab id
+  for free from `sender.tab`, so a content script never has to ask who it is before
+  reporting an event.
+- **The content script is a dumb sensor/actuator** (`extension/src/content/content-script.ts`).
+  It attaches listeners at `document_start` and either reports an event (`RECORD_STEP`)
+  or executes a step the worker hands it (`EXECUTE_STEP`). It holds no state of its own.
+- **The selector engine** (`extension/src/content/selector-engine.ts`) fingerprints an
+  element five ways and resolves through that same fallback chain: id (compatibility-
+  checked) → aria-label/role → exact text (+ structural tiebreak) → structural
+  ancestor-path → bounding-box proximity as a last resort.
+- **Replay reproduces real 1× timing** — the actual gaps between recorded actions
+  (capped at 8s), not a fixed per-step delay — and highlights each element before
+  acting so a human can watch it work.
+- **Navigating steps are handled explicitly**: the worker waits for `chrome.tabs.onUpdated`
+  to report `complete` before continuing past a step that triggered navigation, with a
+  guard (`activeLoops`) against two replay loops driving the same tab at once.
+- A real bug the Playwright suite caught on its first run: the replay code grabbed
+  `HTMLInputElement`'s native value-setter unconditionally and applied it to `<select>`
+  and `<textarea>` too, which throws "Illegal invocation" on the wrong element type —
+  silently swallowed by the per-step `try/catch`, so fields just never got set. Fixed
+  in `content-script.ts`'s `nativeValueSetter()` by picking the setter from the
+  matching prototype per element tag. Worth remembering as the shape of bug this
+  codebase is prone to: anything that works for `<input>` needs to be checked against
+  `<select>`/`<textarea>` too.
 
-## Target architecture (V1 MVP)
+## Build plan status
 
-- **Extension shell**: Manifest V3, TypeScript. Content script + service worker +
-  React side panel (not a popup — side panel stays open during page interaction).
-- **Grounding**: deterministic DOM/accessibility-tree selectors first. No ML model
-  needed for V1 — this is what makes replay resilient and fast.
-- **Macro recorder**: capture click/type sequences → replayable script.
-- **UI**: side-panel macro library, step-by-step action log with pause/confirm before
-  execution (never auto-run silently).
-- **Landing page**: Next.js on Vercel, with a recorded demo GIF and a sandboxed
-  practice page (fake checkout/signup) visitors can try instantly without installing.
-- **Ship**: publish to Chrome Web Store; public repo with README, architecture
-  diagram, MIT license, CI (lint, type-check, Playwright E2E, extension build).
-
-Stack for V1: TypeScript, React + Vite, Manifest V3, Playwright (for both testing and
-as a thematically fitting "automation tool tested by an automation framework" detail).
-
-V2 (later, not part of V1) adds the on-device vision model (quantized ViT via ONNX
-Runtime Web + WebGPU), a WebLLM local planner, a privacy transparency panel, and
-macro-sharing backed by an optional Fastify + Postgres service. V3 is
-production-hardening (multi-tab orchestration, scheduled automation, team controls,
-Firefox port). Don't build V2/V3 features until V1 ships and works end-to-end.
-
-## Build plan (from scratch to a shipped V1)
-
-1. **Scaffold**: `pnpm create vite` React+TS side-panel app, wire up Manifest V3
-   `manifest.json` (permissions: `activeTab`, `scripting`, `sidePanel`, `storage`).
-   Get "hello world" side panel rendering on any tab.
-2. **Selector engine**: build the multi-strategy selector resolver (id → aria-label →
-   text → visual position) as a standalone, unit-tested module — this is the
-   technical core, get it right before UI polish.
-3. **Recorder**: content script listens for click/input events during a "recording"
-   session, emits a step list; background service worker persists macros to
-   `chrome.storage.local` / IndexedDB.
-4. **Replayer**: given a saved macro, re-resolve each step's target element via the
-   selector engine and dispatch the recorded action, with a visible per-step log and
-   a pause/confirm gate before the first execution of a new macro.
-5. **Side panel UI**: macro list (create/rename/delete/run), live action log view.
-6. **Sandboxed practice page**: a small fake signup/checkout flow (static site) to
-   record/replay against — this becomes both the dev testbed and the public demo.
-7. **Playwright E2E**: record-then-replay regression tests against the practice page.
-8. **Landing page**: Next.js on Vercel — pitch, embedded demo GIF, "Add to Chrome"
-   link, link to the sandboxed practice page.
-9. **Packaging & ship**: MIT license, README with architecture diagram + benchmarks
-   section (fill in real replay-success-rate numbers once measured), CI badges,
-   submit to Chrome Web Store (expect review lag — have a downloadable `.zip` release
-   as a fallback install path in the meantime).
-10. **(Later, V2)** on-device vision fallback + WebLLM planner — only after V1's
-    deterministic path is solid, since these are the highest-execution-risk pieces.
-
-Resume/portfolio framing (bullets, talking points, GitHub repo structure) is already
-drafted in report §11 — deliberately not the focus right now per current instructions;
-revisit once V1 is real and has real numbers to fill in.
+1. ✅ Scaffold (Vite + React + TS + `@crxjs/vite-plugin`, MV3 skeleton)
+2. ✅ Selector engine
+3. ✅ Recorder (click, input, Enter/Tab/Escape, scroll; typing collapses to one step per field)
+4. ✅ Replayer (1× timing, cross-navigation, element highlighting)
+5. ✅ Side panel UI (macro list, live capture feed, replay log, error banner for restricted pages)
+6. ✅ Sandboxed practice site
+7. ✅ Playwright E2E test (`extension/e2e/record-replay.spec.ts`, `npm run test:e2e`)
+8. ✅ Landing page (`landing/index.html`)
+9. ⬜ **Packaging & ship** — README, architecture diagram, CI (lint/typecheck/E2E on
+   push), MIT license file, Chrome Web Store submission (expect review lag — keep a
+   downloadable `.zip` release as a fallback install path).
+10. ⬜ *(V2, not started)* on-device vision fallback for canvas/shadow-DOM elements the
+    deterministic selector chain can't see, via WebGPU. Don't start this before step 9.
 
 ## Working notes for future sessions
 
-- Treat `sih_report.html` as the source of truth for *why* this project was chosen —
-  don't re-litigate the selection unless new information changes the calculus.
-- The privacy claim ("nothing leaves the device") is the entire product thesis. Any
-  new feature that silently sends data off-device breaks the pitch — cloud fallback
-  must always be opt-in and visibly disclosed in the UI.
-- No code exists yet as of 2026-08-29. The next session's job is step 1 of the build
-  plan above: scaffold the extension.
+- The privacy claim ("nothing leaves the device") is the whole product thesis. Any new
+  feature that silently sends data off-device breaks the pitch.
+- Before recommending or reusing any specific function/file mentioned here, verify it
+  still exists — this file is a snapshot, `git log`/the code are the source of truth.
+- Resume/portfolio framing (bullets, talking points) is drafted in the report §11 but
+  was explicitly deferred by the user — pick it up only when asked.
+- Run the extension locally: `cd extension && npm run build`, then load `extension/dist`
+  as an unpacked extension in `brave://extensions` (Developer mode → Load unpacked).
+  Reload the extension after every rebuild; refresh any already-open test tabs too.
